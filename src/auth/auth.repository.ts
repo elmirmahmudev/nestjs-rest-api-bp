@@ -1,5 +1,7 @@
 import { ConflictException, InternalServerErrorException } from "@nestjs/common";
 import { EntityRepository, Repository } from "typeorm";
+import * as bcrypt from 'bcrypt';
+
 import { AuthCredentialsDto } from "./dto/auth.credentials";
 import { UserEntity } from "./user.entity";
 
@@ -11,7 +13,8 @@ export class UserRepository extends Repository<UserEntity> {
 
         const user = new UserEntity();
         user.username = username;
-        user.password = password;
+        user.salt = await bcrypt.genSalt();
+        user.password = await this.hashPassword(password, user.salt);
 
         try {
             await user.save();
@@ -22,5 +25,24 @@ export class UserRepository extends Repository<UserEntity> {
                 throw new InternalServerErrorException();
             }            
         }
+    }
+    async validateUserPassword(authCredentialsDto: AuthCredentialsDto): Promise<string> {
+        const {username, password} = authCredentialsDto;
+        let user;
+        try{
+            user = await this.findOne({username});
+        } catch(error){
+            console.log('-=---- ', error);
+            
+        }
+        if (user && await user.validatePassword(password)) {
+            return user.username;
+        } else {
+            return null;
+        }
+        
+    }
+    private async hashPassword(password: string, salt: string): Promise<string> {
+        return bcrypt.hash(password, salt)
     }
 }
